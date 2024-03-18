@@ -1,0 +1,151 @@
+Program.Sub.ScreenSU.Start
+Gui.Form_MM..Create
+Gui.Form_MM..Caption("Maintenance Menu")
+Gui.Form_MM..Size(10185,2700)
+Gui.Form_MM..MinX(0)
+Gui.Form_MM..MinY(0)
+Gui.Form_MM..Position(0,0)
+Gui.Form_MM..BackColor(-2147483633)
+Gui.Form_MM..MousePointer(0)
+Gui.Form_MM..Event(UnLoad,Form_MM_UnLoad)
+Gui.Form_MM.lbl1.Create(Label,"Set the path into EIPP file will be exported:",True,4170,255,0,480,405,True,0,"Arial",9,-2147483633,0)
+Gui.Form_MM.lbl1.FontStyle(True,False,False,False,False)
+Gui.Form_MM.lbl2.Create(Label,"Export File Path",True,1935,255,0,480,1125,True,0,"Arial",9,-2147483633,0)
+Gui.Form_MM.cmd_ExportPath.Create(Button)
+Gui.Form_MM.cmd_ExportPath.Size(1005,375)
+Gui.Form_MM.cmd_ExportPath.Position(7005,1380)
+Gui.Form_MM.cmd_ExportPath.Caption("Browser")
+Gui.Form_MM.cmd_ExportPath.Event(Click,cmd_ExportPath_Click)
+Gui.Form_MM.cmd_SaveExport.Create(Button)
+Gui.Form_MM.cmd_SaveExport.Size(1530,375)
+Gui.Form_MM.cmd_SaveExport.Position(8250,1380)
+Gui.Form_MM.cmd_SaveExport.Caption("Apply Changes")
+Gui.Form_MM.cmd_SaveExport.Event(Click,cmd_SaveExport_Click)
+Gui.Form_MM.txt_ExportPath.Create(TextBox,"",True,6180,300,0,480,1410,True,0,"Arial",8,-2147483643,1)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+V.Global.sExportDir.Declare(String)
+V.Global.sError.Declare(String)
+
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'Author: Arturo Almaguer
+'Date: 31 May 2021
+'Customer: Clock Spring NRI
+'Maintenance Menu for ARC ID 6373
+
+F.Intrinsic.Control.Try
+
+	F.Intrinsic.Control.CallSub(CheckTable)
+	F.Intrinsic.Control.CallSub(LoadData)
+	GUI.Form_MM..Show
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.cmd_ExportPath_Click.Start
+'Subroutine triggered when user clicks on browser to select folder
+F.Intrinsic.Control.Try
+
+	F.Intrinsic.UI.FolderBrowser("Select the path to export EIPP file", "", V.Global.sExportDir)
+	
+	F.Intrinsic.Control.If(V.Global.sExportDir.IsNotCancel)
+		GUI.Form_MM.txt_ExportPath.Text(V.Global.sExportDir)
+	F.Intrinsic.Control.Else
+		F.Intrinsic.UI.Msgbox("Export path required. Select a folder if you want to change it from current one", "Required Field")
+	F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.cmd_ExportPath_Click.End
+
+Program.Sub.cmd_SaveExport_Click.Start
+'Subroutine triggered when user clicks saves updated export path
+
+F.Intrinsic.Control.Try
+
+	V.Local.sSQL.Declare(String)
+	
+	F.ODBC.Connection!Con.OpenCompanyConnection
+	F.Intrinsic.String.Build("update GCG_6373_MM set EXPORTDIR = '{0}';", V.Global.sExportDir, V.Local.sSQL)
+	F.ODBC.Connection!Con.Execute(V.Local.sSQL)
+	F.ODBC.Connection!Con.Close
+	F.Intrinsic.UI.Msgbox("Export path has been updated", "Confirmation")
+	
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.cmd_SaveExport_Click.End
+
+Program.Sub.CheckTable.Start
+'Checks if table exists in DB, creates it if it doesn't
+F.Intrinsic.Control.Try
+
+	V.Local.bExists.Declare(Boolean)
+	
+	F.ODBC.Connection!Con.OpenCompanyConnection
+	F.ODBC.Connection!Con.TableExists("GCG_6373_MM", V.Local.bExists)
+		F.Intrinsic.Control.If(V.Local.bExists, =, False)
+			F.ODBC.Connection!Con.Execute("CREATE TABLE GCG_6373_MM (EXPORTDIR CHAR(80));")
+		F.Intrinsic.Control.EndIf
+	F.ODBC.Connection!Con.Close
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.CheckTable.End
+
+Program.Sub.LoadData.Start
+'This part is loading data from database to datable
+
+F.Intrinsic.Control.Try
+	
+	V.Local.sSQL.Declare(String)
+	
+	'To check if datatables already exists
+	F.Intrinsic.Control.If(V.DataTable.dtDirectories.Exists)
+		F.Data.DataTable.Close("dtDirectories")
+	F.Intrinsic.Control.EndIf
+	
+	F.ODBC.Connection!Con.OpenCompanyConnection
+	F.ODBC.Connection!Con.ExecuteAndReturn("select EXPORTDIR from GCG_6373_MM", V.Local.sSQL)
+	
+	F.Intrinsic.Control.If(V.Local.sSQL, =, "")
+		GUI.Form_MM.txt_ExportPath.Text("")
+		F.ODBC.Connection!Con.Execute("insert into GCG_6373_MM(EXPORTDIR) values('');")
+	F.Intrinsic.Control.Else
+		F.Data.DataTable.CreateFromSQL("dtDirectories", "Con", "select EXPORTDIR from GCG_6373_MM", True)
+		GUI.Form_MM.txt_ExportPath.Text(V.DataTable.dtDirectories(0).EXPORTDIR!FieldVal)
+	F.Intrinsic.Control.EndIf
+	F.ODBC.Connection!Con.Close
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.LoadData.End
+
+Program.Sub.Form_MM_UnLoad.Start
+F.Intrinsic.Control.End()
+
+Program.Sub.Form_MM_UnLoad.End
+
+Program.Sub.CatchError.Start
+F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}", V.Ambient.ScriptPath, V.Ambient.Newline, V.Ambient.SubroutineCalledFrom, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Global.sError) 
+F.Intrinsic.UI.Msgbox(V.Global.sError)
+F.Intrinsic.Control.End()
+Program.Sub.CatchError.End
