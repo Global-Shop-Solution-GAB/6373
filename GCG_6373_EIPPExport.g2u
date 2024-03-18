@@ -1,0 +1,172 @@
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'Author: Arturo Almaguer
+'Date: 31 May 2021
+'Customer: Clock Spring NRI
+'This program creates a EIPP csv file and exports it to a particular location selected by using a custom maintenance menu
+
+F.Intrinsic.Control.Try
+
+	F.Intrinsic.Control.CallSub(LoadData)
+	F.Intrinsic.Control.CallSub(ExportCSV)
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.LoadData.Start
+'This part is loading data from database to dashboard
+
+F.Intrinsic.Control.Try
+	
+	V.Local.sBatch.Declare(String)
+	V.Local.sSQL.Declare(String)
+	V.Local.iCounter.Declare(Long)
+		
+	V.Local.sBatch.Set(V.Passed.BATCH)
+	
+	'To check if datatables already exists
+	F.Intrinsic.Control.If(V.DataTable.dtBatch.Exists)
+		F.Data.DataTable.Close("dtBatch")
+	F.Intrinsic.Control.EndIf
+	
+	F.ODBC.Connection!Con.OpenCompanyConnection
+	F.Intrinsic.String.Build("select RTRIM(B.NAME_CUSTOMER) Name, A.INVTOT as AmountDue, Substring(Left(A.DUE_DATE_SEQL,10),6,2) + '/' + right(Left(A.DUE_DATE_SEQL,10),2) + '/' +  Left(Left(A.DUE_DATE_SEQL,10),4) as DateDue, B.CUSTOMER as 'Account Number', LEFT(B.ZIP, 5) as ZIP from V_AR_BATCH_TRANS A left join V_CUSTOMER_MASTER B on A.CUST = B.CUSTOMER where A.BATCH = '{0}' and A.RETAIN = '0'" , V.Local.sBatch, V.Local.sSQL)
+	F.Data.DataTable.CreateFromSQL("dtBatch", "Con", V.Local.sSQL, True)
+	F.ODBC.Connection!Con.Close
+	
+	'Setting new column on datatable and looping thorough all records to assign Company Code value
+	F.Data.DataTable.AddColumn("dtBatch", "Company Code", "String")
+	F.Intrinsic.Control.For(V.Local.iCounter, 0, V.DataTable.dtBatch.RowCount--, 1) 
+		F.Data.DataTable.SetValue("dtBatch", V.Local.iCounter, "Company Code", V.Caller.CompanyCode)
+	F.Intrinsic.Control.Next(V.Local.iCounter)
+	
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+
+Program.Sub.LoadData.End
+
+Program.Sub.ExportCSV.Start
+'Exporting datatable to CSV
+
+F.Intrinsic.Control.Try
+
+	V.Local.sFileName.Declare(String)
+	V.Local.sSQL.Declare(String)
+	V.Local.sMessage.Declare(String)
+	
+	F.ODBC.Connection!Con.OpenCompanyConnection
+	F.ODBC.Connection!Con.ExecuteAndReturn("select EXPORTDIR from GCG_6373_MM;",V.Local.sSQL)
+	F.ODBC.Connection!Con.Close
+	
+	V.Local.sMessage.Set("Exporting file")
+	F.Intrinsic.Control.CallSub(Logging, "Message", V.Local.sMessage)
+	
+	F.Intrinsic.String.Build("{0}\EIPP-{1}-{2}.{3}.csv", V.Local.sSQL, V.Ambient.Now.FormatYYYYMMDD, V.Ambient.Now.FormatHH, V.Ambient.Now.FormatNN, V.Local.sFileName)
+	F.Data.DataTable.SaveToCSV("dtBatch", V.Local.sFileName, True)
+
+	F.Intrinsic.String.Build("File has been exported to {0}", V.Local.sFileName, V.Local.sMessage)
+	F.Intrinsic.Control.CallSub(Logging, "Message", V.Local.sMessage)
+	
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+
+Program.Sub.ExportCSV.End
+
+Program.Sub.CatchError.Start
+
+V.Local.sMessage.Declare(String)
+
+F.Intrinsic.String.Build("Project: {0}{1}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}{1}{1}GAB Version: {5}", V.Ambient.ScriptPath, V.Ambient.Newline, V.Ambient.SubroutineCalledFrom, V.Ambient.ErrorNumber, V.Ambient.ErrorDescription, V.Ambient.GABVersion, V.Global.sError) 
+F.Intrinsic.UI.Msgbox(V.Global.sError)
+V.Local.sMessage.Set(V.Global.sError)
+F.Intrinsic.Control.CallSub(Logging, "Message", V.Local.sMessage)
+F.Intrinsic.Control.End()
+Program.Sub.CatchError.End
+
+Program.Sub.Logging.Start
+
+F.Intrinsic.Control.Try
+
+	V.Local.sProject.Declare(String)
+	V.Local.sMessage.Declare(String)
+	V.Local.sPath.Declare(String)
+	V.Local.sFile.Declare(String)
+	V.Local.sContents.Declare(String)
+	
+	V.Local.sProject.Set("ARC 6373")
+	V.Local.sMessage.Set(V.Args.Message.Trim)
+	
+	F.Intrinsic.String.Build("{0}\CUSTOM\{1}\LOG", V.Caller.GlobalDir, V.Local.sProject,V.Local.sPath)
+	F.Intrinsic.Control.CallSub(CheckDir, "Path", V.Local.sPath)
+	
+	F.Intrinsic.String.Build("{0}\{1}-Log.txt", V.Local.sPath, V.Local.sProject, V.Local.sFile)
+	F.Intrinsic.Control.CallSub(CheckFile, "File", V.Local.sFile)
+	
+	F.Intrinsic.String.Build("{0} {1}: {2}", V.Ambient.Date.FormatYYYY-MM-DD, V.Ambient.Time.Format!HH:NN:SS, V.Local.sMessage, V.Local.sContents)
+	F.Intrinsic.File.Append2FileNewLine(V.Local.sFile, V.Local.sContents)
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+
+Program.Sub.Logging.End
+
+Program.Sub.CheckDir.Start
+'Check if the given import directory exists, create it if it doesn't
+
+F.Intrinsic.Control.Try
+
+	V.Local.sPath.Declare(String)
+	V.Local.bExists.Declare(Boolean)
+	
+	V.Local.sPath.Set(V.Args.Path)
+	F.Intrinsic.File.DirExists(V.Local.sPath, V.Local.bExists)
+	F.Intrinsic.Control.If(V.Local.bExists.Not)
+		F.Intrinsic.File.CreateDir(V.Local.sPath)
+	F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+
+Program.Sub.CheckDir.End
+
+Program.Sub.CheckFile.Start
+'Check if the given file exists and create it if it doesn't
+
+F.Intrinsic.Control.Try
+
+	V.Local.sFile.Declare(String)
+	V.Local.bExists.Declare(Boolean)
+	V.Local.sContents.Declare(String)
+	
+	V.Local.sFile.Set(V.Args.File)
+	F.Intrinsic.File.Exists(V.Local.sFile, V.Local.bExists)
+	F.Intrinsic.Control.If(V.Local.bExists.Not)
+		F.Intrinsic.String.Build("{0} {1}: Log Start", V.Ambient.Date.FormatYYYY-MM-DD, V.Ambient.Time.Format!HH:NN:SS, V.Local.sContents)
+		F.Intrinsic.File.String2File(V.Local.sFile, V.Local.sContents)
+	F.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Catch
+
+	F.Intrinsic.Control.CallSub(CatchError)
+	
+F.Intrinsic.Control.EndTry
+
+Program.Sub.CheckFile.End
